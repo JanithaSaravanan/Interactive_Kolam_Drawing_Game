@@ -1,0 +1,62 @@
+{
+    "star": {
+        "id": "star",
+        "label": "Star",
+        "level": 1,
+        "fact": "Star kolams often symbolize guidance, balance and harmony. They are simple yet striking and good for beginners.",
+        "dots": [
+            { "id": 1, "x": 0.5, "y": 0.1 }, 
+            { "id": 2, "x": 0.9, "y": 0.4 }, 
+            { "id": 3, "x": 0.7, "y": 0.9 },
+            { "id": 4, "x": 0.3, "y": 0.9 }, 
+            { "id": 5, "x": 0.1, "y": 0.4 }
+        ],
+        "paths": [
+            { "from": 1, "to": 3 }, 
+            { "from": 3, "to": 5 }, 
+            { "from": 5, "to": 2 },
+            { "from": 2, "to": 4 }, 
+            { "from": 4, "to": 1 }
+        ]
+    },
+    "hexagon": {
+        "id": "hexagon",
+        "label": "Hexagon",
+        "level": 1,
+        "fact": "Hexagon kolams are built from six-fold symmetry — they feel stable and are commonly used at festive thresholds.",
+        "dots": [
+            { "id": 1, "x": 0.5, "y": 0.1 }, 
+            { "id": 2, "x": 0.85, "y": 0.3 }, 
+            { "id": 3, "x": 0.85, "y": 0.7 },
+            { "id": 4, "x": 0.5, "y": 0.9 }, 
+            { "id": 5, "x": 0.15, "y": 0.7 }, 
+            { "id": 6, "x": 0.15, "y": 0.3 }
+        ],
+        "paths": [
+            { "from": 1, "to": 2 }, 
+            { "from": 2, "to": 3 }, 
+            { "from": 3, "to": 4 },
+            { "from": 4, "to": 5 }, 
+            { "from": 5, "to": 6 }, 
+            { "from": 6, "to": 1 }
+        ]
+    },
+    "lotus": {
+        "id": "lotus",
+        "label": "Lotus Bud",
+        "level": 1,
+        "fact": "Lotus-themed kolams celebrate purity and spiritual growth. Curved strokes often represent petals and life cycles.",
+        "dots": [
+            { "id": 1, "x": 0.5, "y": 0.9 }, 
+            { "id": 2, "x": 0.2, "y": 0.7 },
+            { "id": 3, "x": 0.5, "y": 0.1 }, 
+            { "id": 4, "x": 0.8, "y": 0.7 }
+        ],
+        "paths": [
+            { "from": 1, "to": 2, "type": "quadratic", "cp": { "x": 0.3, "y": 0.95 } },
+            { "from": 2, "to": 3, "type": "quadratic", "cp": { "x": 0.1, "y": 0.3 } },
+            { "from": 3, "to": 4, "type": "quadratic", "cp": { "x": 0.9, "y": 0.3 } },
+            { "from": 4, "to": 1, "type": "quadratic", "cp": { "x": 0.7, "y": 0.95 } }
+        ]
+    }
+}
