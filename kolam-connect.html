@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Kolam Drawing Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Laila:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Base Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDF8F2;
+            color: #4A3F35;
+        }
+        .laila-font {
+            font-family: 'Laila', serif;
+        }
+        /* ... Existing Styles ... */
+
+        /* NEW: Styles for the Intro Content to be in the right corner */
+       
+        
+        /* Interactive/Game Styles */
+        .control-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .canvas-container {
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+            border: 1px solid #E9E4F5;
+            background-color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        #kolamCanvas {
+            touch-action: none;
+            cursor: crosshair;
+        }
+        .message-bot {
+            background-color: #f3f4f6;
+            display: inline-block;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message-user {
+            background-color: #D66D75;
+            color: white;
+            display: inline-block;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        /* Feedback Styles */
+        .feedback-correct {
+            color: #38A169;
+        }
+        .feedback-incorrect {
+            color: #E53E3E;
+        }
+        .feedback-info {
+            color: #2b6cb0;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div id="intro-page" class="flex flex-col items-center text-center p-6 max-w-3xl mx-auto">
+        <h1 class="text-5xl md:text-6xl font-bold laila-font" style="color: #D66D75;">Welcome to Kolam Connect</h1>
+        <p class="text-lg mt-4" style="color: #8C7A6B;">Discover the art of traditional Indian floor drawings.</p>
+        
+        <div id="intro-content-container" class="mt-8 text-left space-y-6">
+            <div id="loading-message" class="text-xl text-gray-500">Loading Kolam Data...</div>
+        </div>
+
+        <button 
+            id="start-button"
+            onclick="startKolamGame()"
+            class="control-button mt-10 px-8 py-3 text-lg font-bold rounded-full bg-gray-400 text-white shadow-xl"
+            disabled
+        >
+            Let's Start
+        </button>
+    </div>
+
+    <div id="app-root" class="w-full max-w-4xl" style="display: none;">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold laila-font" style="color: #D66D75;">
+                Kolam Connect
+            </h1>
+            <p class="text-sm text-gray-600">Practice your Pulli Kolams</p>
+        </header>
+
+        <main class="flex gap-6">
+            <div id="game-area" class="flex-1 flex justify-center">
+            </div>
+
+            <div id="chatbot-area" class="w-96">
+            </div>
+        </main>
+    </div>
+
+
+    <script>
+    // --- 0. Data Storage and Fetching ---
+    // --- 0. Data Storage and Fetching (Add SHAPES here) ---
+    let kolamData = {};
+    let kolamList = [];
+    const LEVELS = [1, 2, 3, 4, 5];
+    
+    // Updated array to define filterable shapes based on your kolam_patterns.json
+    const SHAPES = [
+        'All Shapes',
+        'Star',
+        'Hexagon',
+        'Flower' // This covers your "Lotus Bud" design
+    ];
+
+    async function fetchKolamData() {
+        try {
+            const response = await fetch('kolam_patterns.json');
+            if (!response.ok) {
+                // Keep the error handling for running locally
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            kolamData = await response.json();
+            kolamList = Object.values(kolamData);
+            console.log("Kolam data loaded successfully.");
+            return true;
+        } catch (error) {
+            console.error("Failed to fetch Kolam data. Ensure 'kolam_patterns.json' is in the same directory AND you are running this file from a local web server (e.g., Python http.server or VS Code Live Server).", error);
+            document.getElementById('loading-message').textContent = "ERROR: Failed to load data. See console for details. (Try using a local web server!)";
+            return false;
+        }
+    }
+    
+    // --- 1. Global State (Initialized after data is fetched) ---
+    const state = {
+        view: "instruction",
+        chatOpen: false,
+        selectedLevel: 1,
+        selectedKolam: null,
+        completed: loadCompleted(),
+        messages: [{ from: "bot", text: "Welcome to Kolam Connect. Select a Level to begin." }],
+        currentKolam: null, // Will be set in onStartDrawingConfirmed
+        isDrawing: false,
+        completedPaths: [], 
+        currentDrawingPath: [],
+        currentSegment: 0,
+        connectedDots: new Set(),
+        canvas: null,
+        ctx: null,
+        feedbackMessage: "Click the yellow dot to start drawing the path.",
+        feedbackType: 'info',
+    };
+
+    // Visual constants
+    const DOT_RADIUS = 12;
+    const SNAP_RADIUS = 20; 
+    const PATH_TOLERANCE = 18; 
+
+    // --- 2. State Management and Persistence ---
+
+    function loadCompleted() {
+        try {
+            const raw = localStorage.getItem("kolam_completed_v1");
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveCompleted() {
+        localStorage.setItem("kolam_completed_v1", JSON.stringify(state.completed));
+    }
+
+    function setCompleted(newCompleted) {
+        state.completed = newCompleted;
+        saveCompleted();
+        renderApp(); 
+    }
+
+    function getKolamsByLevel(level) {
+        return kolamList.filter(k => k.level === level);
+    }
+
+    function getLevelProgress(level) {
+        const kolamsInLevel = getKolamsByLevel(level);
+        const completedInLevel = kolamsInLevel.filter(k => state.completed.includes(k.id));
+        const total = kolamsInLevel.length;
+        if (total === 0) return 0;
+        return Math.round((completedInLevel.length / total) * 100);
+    }
+    
+    // --- 3. Feedback and Message Logic ---
+
+    function setFeedback(message, type = 'info') {
+        state.feedbackMessage = message;
+        state.feedbackType = type;
+        const feedbackEl = document.getElementById('drawing-feedback');
+        if (feedbackEl) {
+            feedbackEl.textContent = state.feedbackMessage;
+            feedbackEl.className = `h-8 text-xl font-semibold mb-2 text-center transition-opacity duration-300 feedback-${state.feedbackType}`;
+        }
+    }
+
+    function pushBot(text) {
+        state.messages.push({ from: "bot", text });
+        renderChatbot(); 
+    }
+
+    function pushUser(text) {
+        state.messages.push({ from: "user", text });
+        renderChatbot(); 
+    }
+
+    function scrollToBottom() {
+        const chatBox = document.querySelector('#chatbot-area .h-40.overflow-y-auto');
+        if (chatBox) {
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    }
+
+    // --- 4. Main App Flow Control (Exposed to global scope) ---
+
+    window.startKolamGame = function() {
+        document.getElementById('intro-page').style.display = 'none';
+        document.getElementById('app-root').style.display = 'block';
+        
+        state.view = 'instruction';
+        state.chatOpen = false;
+        renderApp();
+    }
+
+    window.openChat = function () {
+        state.chatOpen = true;
+        renderApp();
+    }
+
+    window.closeChat = function () {
+        state.chatOpen = false;
+        renderApp();
+    }
+
+    window.onSelectLevel = function(level) {
+        state.selectedLevel = level;
+        state.selectedKolam = null; 
+        renderChatbot();
+
+        if (level !== 1) {
+            pushUser(`Selected Level ${level}`);
+            pushBot(`Level ${level} is **Upcoming**! Please complete Level 1 first.`);
+        } else {
+             pushUser(`Selected Level ${level}`);
+             pushBot("Choose a design from Level 1 to start drawing.");
+        }
+    }
+
+    window.onSelectKolam = function (kolamId) {
+        const k = kolamData[kolamId];
+        
+        state.selectedKolam = kolamId;
+        
+        if (state.completed.includes(kolamId)) {
+            pushUser(`Selected ${k.label} (Redo)`);
+            pushBot(`You've already completed ${k.label}. Great for practice! ${k.fact}`);
+        } else {
+            pushUser(`Selected ${k.label}`);
+            pushBot(`${k.fact}`);
+        }
+        
+        pushBot("Are you ready to draw? Click 'Start Drawing' when you're ready.");
+    }
+
+    window.onClearSelection = function () {
+        state.selectedKolam = null;
+        pushUser("Cancelled selection");
+        pushBot("Selection cleared. Choose a design to continue.");
+    }
+
+    window.clearProgress = function() {
+        if (confirm("Are you sure you want to clear ALL saved progress? This cannot be undone.")) {
+            localStorage.removeItem("kolam_completed_v1");
+            
+            state.completed = [];
+            state.selectedKolam = null;
+            state.currentKolam = null;
+            state.selectedLevel = 1;
+            state.messages = [{ from: "bot", text: "Progress cleared! Welcome back to the beginning of Level 1." }];
+            
+            state.view = 'instruction';
+            state.chatOpen = true; 
+            renderApp();
+        }
+    }
+
+    window.onStartDrawingConfirmed = function () {
+        if (!state.selectedKolam) return pushBot("Please select a design first.");
+        
+        state.currentKolam = kolamData[state.selectedKolam];
+        pushUser("Yes, I'm ready!");
+        
+        state.view = "drawing"; 
+        renderApp();
+        
+        setTimeout(resetDrawingState, 100);
+    }
+
+    window.onFinishDrawing = function () {
+        const selected = state.selectedKolam;
+        if (!selected || !state.currentKolam) return;
+        
+        if (state.currentSegment < state.currentKolam.paths.length) {
+            setFeedback('Wait! You must complete all lines first.', 'incorrect');
+            return;
+        }
+
+        const newlyCompleted = !state.completed.includes(selected);
+        if (newlyCompleted) {
+            setCompleted([...state.completed, selected]);
+        }
+        
+        pushUser("Finished drawing");
+        if (newlyCompleted) {
+             pushBot(`✨ Wonderful! You completed ${kolamData[selected].label} for the first time!`);
+        } else {
+             pushBot(`✨ You successfully redrew ${kolamData[selected].label}.`);
+        }
+
+        const remaining = getKolamsByLevel(state.selectedLevel).filter(k => !state.completed.includes(k.id)).map(k => k.label);
+        const progress = getLevelProgress(state.selectedLevel);
+        
+        if (progress >= 100) {
+            pushBot("🎉 Level 1 Completed! You're ready for the next challenge.");
+        } else if (remaining.length > 0) {
+            pushBot(`Level 1 Progress: ${progress}%. Remaining: ${remaining.join(", ")}`);
+            pushBot("Select the next design from the list to continue.");
+        } else {
+             pushBot("You've completed all designs! Feel free to practice by re-selecting them.");
+        }
+
+        state.selectedKolam = null;
+        state.currentKolam = null;
+
+        state.view = "instruction";
+        state.chatOpen = true;
+        renderApp();
+    }
+
+    window.onResetDrawing = function() {
+         resetDrawingState();
+    }
+
+    // --- 5. Drawing State Management & Canvas Init ---
+
+    function initCanvas() {
+        if(state.canvas) {
+            state.canvas.removeEventListener('mousedown', startDrawingCanvas);
+            state.canvas.removeEventListener('mousemove', drawingCanvas);
+            state.canvas.removeEventListener('mouseup', stopDrawingCanvas);
+            state.canvas.removeEventListener('mouseleave', stopDrawingCanvas);
+            state.canvas.removeEventListener('touchstart', startDrawingCanvas);
+            state.canvas.removeEventListener('touchmove', drawingCanvas);
+            state.canvas.removeEventListener('touchend', stopDrawingCanvas);
+        }
+        
+        state.canvas = document.getElementById("kolamCanvas");
+        if (!state.canvas) return;
+
+        const container = state.canvas.parentNode;
+        const size = Math.min(container.clientWidth, 600);
+        state.canvas.width = size;
+        state.canvas.height = size;
+        state.ctx = state.canvas.getContext("2d");
+
+        state.canvas.addEventListener('mousedown', startDrawingCanvas);
+        state.canvas.addEventListener('mousemove', drawingCanvas);
+        state.canvas.addEventListener('mouseup', stopDrawingCanvas);
+        state.canvas.addEventListener('mouseleave', stopDrawingCanvas);
+        state.canvas.addEventListener('touchstart', startDrawingCanvas, { passive: false });
+        state.canvas.addEventListener('touchmove', drawingCanvas, { passive: false });
+        state.canvas.addEventListener('touchend', stopDrawingCanvas);
+        
+        drawAll();
+    }
+
+    function resetDrawingState() {
+        state.completedPaths = []; 
+        state.currentDrawingPath = []; 
+        state.currentSegment = 0;
+        state.connectedDots = new Set();
+        
+        if (state.currentKolam && state.currentKolam.paths.length > 0) {
+            const firstPath = state.currentKolam.paths[0];
+            setFeedback(`Start at dot ${firstPath.from}, go towards dot ${firstPath.to}.`, 'info');
+        } else {
+            setFeedback('Ready to draw!', 'info');
+        }
+
+        if (state.canvas) {
+            initCanvas();
+        }
+    }
+
+    // --- 6. Canvas Drawing Utilities (FIXES APPLIED HERE) ---
+
+    function getDotById(id) {
+        // Critical: Check if state.currentKolam exists before accessing dots
+        if (!state.currentKolam || !state.currentKolam.dots) return null;
+        return state.currentKolam.dots.find((d) => d.id === id);
+    }
+
+    function distance(p1, p2) {
+        return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    }
+
+    function pointLineDistance(p, a, b) {
+        const L2 = distance(a, b) ** 2;
+        if (L2 === 0) return distance(p, a);
+        let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / L2;
+        t = Math.max(0, Math.min(1, t));
+        const proj = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+        return distance(p, proj);
+    }
+
+    function drawGuides(ctx, scale) {
+        // FIX: Ensure currentKolam and paths exist before drawing guides
+        if (!state.currentKolam || !state.currentKolam.paths) return;
+
+        ctx.strokeStyle = "#E9E4F5";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 8]);
+        state.currentKolam.paths.forEach((path) => {
+            const from = getDotById(path.from);
+            const to = getDotById(path.to);
+            if (!from || !to) return;
+            ctx.beginPath();
+            ctx.moveTo(from.x * scale, from.y * scale);
+            if (path.type === "quadratic") {
+                ctx.quadraticCurveTo(path.cp.x * scale, path.cp.y * scale, to.x * scale, to.y * scale);
+            } else {
+                ctx.lineTo(to.x * scale, to.y * scale);
+            }
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+    }
+
+    function drawDots(ctx, scale) {
+        // FIX: Ensure currentKolam and dots exist before drawing dots
+        if (!state.currentKolam || !state.currentKolam.dots) return;
+
+        state.currentKolam.dots.forEach((dot) => {
+            const isConnected = state.connectedDots.has(dot.id);
+            const isStartDot = (state.currentSegment < state.currentKolam.paths.length && dot.id === state.currentKolam.paths[state.currentSegment].from);
+            
+            ctx.beginPath();
+            ctx.arc(dot.x * scale, dot.y * scale, DOT_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = isConnected ? "#68D391" : isStartDot ? "#F6E05E" : "#EDF2F7";
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#4A5568";
+            ctx.stroke();
+            
+            ctx.fillStyle = "#1F2937";
+            ctx.font = `bold ${DOT_RADIUS}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(dot.id, dot.x * scale, dot.y * scale);
+        });
+    }
+
+    function drawUserPath(ctx) {
+        // FIX: Ensure currentKolam exists before drawing paths
+        if (!state.currentKolam) return;
+
+        state.completedPaths.forEach(path => {
+            for (let i = 0; i < path.length - 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(path[i].x, path[i].y);
+                ctx.lineWidth = 8;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.strokeStyle = "#48BB78"; 
+                ctx.lineTo(path[i + 1].x, path[i + 1].y);
+                ctx.stroke();
+            }
+        });
+
+        if (state.currentDrawingPath.length > 1) {
+            const path = state.currentDrawingPath;
+            for (let i = 0; i < path.length - 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(path[i].x, path[i].y);
+                ctx.lineWidth = 10;
+                ctx.lineCap = "round";
+                ctx.lineJoin = "round";
+                ctx.strokeStyle = path[i].isCorrect ? "#48BB78" : "#F56565";
+                ctx.lineTo(path[i + 1].x, path[i + 1].y);
+                ctx.stroke();
+            }
+        }
+    }
+
+    function drawAll() {
+        const { canvas, ctx } = state;
+        if (!canvas || !ctx || !state.currentKolam) return; // FIX: Main check here
+        const scale = canvas.width;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGuides(ctx, scale);
+        drawUserPath(ctx);
+        drawDots(ctx, scale);
+    }
+
+    // --- 7. Canvas Event Handlers (functions remain the same) ---
+
+    function getCanvasPos(e) {
+        const { canvas } = state;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : (e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0].clientX : e.clientX);
+        const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : (e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0].clientY : e.clientY);
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function startDrawingCanvas(e) {
+        if (state.view !== "drawing" || state.currentSegment >= state.currentKolam.paths.length) return;
+        e.preventDefault(); 
+        const pos = getCanvasPos(e);
+        
+        const currentPath = state.currentKolam.paths[state.currentSegment];
+        const startDot = getDotById(currentPath.from);
+        const startPos = { x: startDot.x * state.canvas.width, y: startDot.y * state.canvas.height };
+        
+        if (distance(pos, startPos) <= SNAP_RADIUS) {
+            state.isDrawing = true;
+            state.currentDrawingPath = [{ ...startPos, isCorrect: true }]; 
+            state.connectedDots.add(startDot.id);
+            setFeedback('Path started! Keep the line smooth.', 'correct');
+            drawAll(); 
+        } else {
+            setFeedback('❌ Must start on the yellow dot!', 'incorrect');
+        }
+    }
+
+    function drawingCanvas(e) {
+        if (!state.isDrawing || state.currentSegment >= state.currentKolam.paths.length) return;
+        e.preventDefault(); 
+        const pos = getCanvasPos(e);
+        
+        const currentPath = state.currentKolam.paths[state.currentSegment];
+        const fromDot = getDotById(currentPath.from);
+        const toDot = getDotById(currentPath.to);
+        const fromPos = { x: fromDot.x * state.canvas.width, y: fromDot.y * state.canvas.height };
+        const toPos = { x: toDot.x * state.canvas.width, y: toDot.y * state.canvas.height };
+
+        let isCorrect = false;
+        const scale = state.canvas.width;
+        
+        if (currentPath.type === "quadratic") {
+            const cpPos = { x: currentPath.cp.x * scale, y: currentPath.cp.y * scale };
+            isCorrect = pointLineDistance(pos, fromPos, cpPos) <= PATH_TOLERANCE * 1.5 || pointLineDistance(pos, cpPos, toPos) <= PATH_TOLERANCE * 1.5;
+        } else {
+            isCorrect = pointLineDistance(pos, fromPos, toPos) <= PATH_TOLERANCE;
+        }
+
+        state.currentDrawingPath.push({ ...pos, isCorrect });
+        
+        if (isCorrect) setFeedback('Keep going! You are on track.', 'correct');
+        else setFeedback('⚠️ Try to stay closer to the path!', 'incorrect');
+
+        if (distance(pos, toPos) <= SNAP_RADIUS) {
+            state.currentDrawingPath.push({ ...toPos, isCorrect: true });
+            state.connectedDots.add(toDot.id);
+            
+            state.completedPaths.push(state.currentDrawingPath);
+            state.currentDrawingPath = []; 
+            
+            state.currentSegment++;
+            state.isDrawing = false;
+            
+            if (state.currentSegment >= state.currentKolam.paths.length) {
+                setFeedback('✨ Wonderful! Kolam complete! Click Finish.', 'correct');
+                renderApp(); 
+            } else {
+                const nextPath = state.currentKolam.paths[state.currentSegment];
+                setFeedback(`Great! Now go from dot ${nextPath.from} towards dot ${nextPath.to}.`, 'info');
+            }
+        }
+        
+        drawAll(); 
+    }
+
+    function stopDrawingCanvas(e) {
+        if (state.isDrawing) {
+            state.isDrawing = false;
+            
+            if (state.currentSegment < state.currentKolam.paths.length) {
+                const startDotId = state.currentKolam.paths[state.currentSegment].from;
+                state.connectedDots.delete(startDotId); 
+                state.currentDrawingPath = []; 
+            }
+            setFeedback('Oops! You let go. Restart your path from the yellow dot.', 'incorrect');
+            drawAll();
+        }
+    }
+
+    // --- 8. Rendering Functions (HTML/UI) ---
+
+    function renderMessage(m, i) {
+        return `<div class="mb-2 ${m.from === "bot" ? "text-left" : "text-right"}"><div class="${m.from === "bot" ? "message-bot" : "message-user"}">${m.text}</div></div>`;
+    }
+    
+    function renderChatbot() {
+        const chatbotArea = document.getElementById('chatbot-area');
+        const progress = getLevelProgress(state.selectedLevel);
+        
+        if (state.chatOpen) {
+             chatbotArea.innerHTML = `
+                <div>
+                    <div class="flex justify-end mb-2">
+                        <button class="text-gray-500 text-2xl" onclick="closeChat()">&times;</button>
+                    </div>
+                    ${ChatbotPanel(progress)}
+                </div>
+            `;
+             setTimeout(() => {
+                const chatBox = document.querySelector('#chatbot-area .h-40.overflow-y-auto');
+                if (chatBox) chatBox.innerHTML = state.messages.map(renderMessage).join('');
+                scrollToBottom();
+             }, 0);
+        } else {
+             chatbotArea.innerHTML = ChatbotToggle(progress);
+        }
+    }
+
+    function ChatbotPanel(progress) {
+        const levelListHtml = LEVELS.map(level => {
+            const isSelected = state.selectedLevel === level;
+            const progress = getLevelProgress(level);
+            
+            return `
+                <button
+                    onclick="onSelectLevel(${level})"
+                    class="px-3 py-1 rounded-full font-medium border text-sm control-button
+                        ${isSelected ? "bg-[#D66D75] text-white shadow-md" : (level === 1 && progress === 100) ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}"
+                >
+                    Level ${level} ${level === 1 && progress > 0 ? `(${progress}%)` : ''}
+                </button>
+            `;
+        }).join('');
+
+        let contentHtml = '';
+        if (state.selectedLevel !== 1) {
+            contentHtml = `<p class="text-lg text-center font-semibold text-gray-600 my-4">Level ${state.selectedLevel} is **Upcoming**! 🚧</p>`;
+        } else {
+            const kolamListHtml = getKolamsByLevel(1).map((k) => {
+                const done = state.completed.includes(k.id);
+                const isSelected = state.selectedKolam === k.id;
+                
+                return `
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <div class="flex items-center gap-3">
+                            <button
+                                onclick="onSelectKolam('${k.id}')"
+                                class="px-3 py-2 rounded-lg font-medium border 
+                                    ${done ? (isSelected ? "bg-green-200 border-green-500 text-green-800" : "bg-gray-200 text-gray-500 hover:bg-green-100") : (isSelected ? "bg-yellow-100 border-yellow-500 text-yellow-800" : "bg-white hover:bg-gray-100")}"
+                            >
+                                ${k.label}
+                            </button>
+                            ${done ? '<span class="text-sm text-green-600">✓ Done (Select to Redo)</span>' : ''}
+                        </div>
+                        <div class="text-xs text-gray-500">${done ? "Completed" : "Not tried"}</div>
+                    </div>
+                `;
+            }).join('');
+            contentHtml = kolamListHtml;
+        }
+
+        return `
+            <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-4 flex flex-col gap-4">
+                <div class="flex flex-wrap gap-2 justify-center">
+                    ${levelListHtml}
+                </div>
+
+                <div class="rounded-md bg-gray-50 p-3">
+                    ${contentHtml}
+                </div>
+
+                <div class="flex gap-2">
+                    <button
+                        class="flex-1 py-2 rounded-lg font-semibold ${state.selectedKolam ? "bg-[#D66D75] text-white control-button" : "bg-gray-200 text-gray-600"}"
+                        onclick="onStartDrawingConfirmed()"
+                        ${!state.selectedKolam ? "disabled" : ""}
+                    >
+                        Start Drawing
+                    </button>
+                    <button
+                        class="py-2 px-3 rounded-lg bg-gray-100 text-gray-700 control-button"
+                        onclick="onClearSelection()"
+                    >
+                        Clear
+                    </button>
+                </div>
+
+                <div class="h-40 overflow-y-auto bg-white rounded p-2 border">
+                    </div>
+                
+                <button
+                    onclick="clearProgress()"
+                    class="px-4 py-2 rounded-lg bg-red-100 text-red-600 text-sm hover:bg-red-200 control-button"
+                >
+                    Clear All Progress
+                </button>
+
+                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div class="h-full bg-green-400" style="width: ${progress}%"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    function DrawingScreen() {
+        const kolamLabel = state.selectedKolam ? kolamData[state.selectedKolam].label : "Kolam";
+        const isKolamComplete = state.currentKolam && state.currentSegment === state.currentKolam.paths.length; 
+
+        return `
+            <div class="flex flex-col items-center gap-4 w-full">
+                <div class="w-full max-w-2xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-2xl font-bold">Drawing: ${kolamLabel}</h2>
+                        <button
+                            class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg control-button"
+                            onclick="state.view = 'instruction'; renderApp();"
+                        >
+                            Back to Chatbot
+                        </button>
+                    </div>
+                    
+                    <div id="drawing-feedback" class="h-8 text-xl font-semibold mb-2 text-center transition-opacity duration-300 feedback-${state.feedbackType}">
+                        ${state.feedbackMessage}
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-md p-4">
+                        <div class="canvas-container w-full h-[480px] rounded-lg overflow-hidden">
+                            <canvas id="kolamCanvas" class="w-full h-full"></canvas>
+                        </div>
+
+                        <div class="mt-4 flex gap-2 justify-end">
+                            <button
+                                class="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 control-button"
+                                onclick="onResetDrawing()"
+                            >
+                                Reset
+                            </button>
+                            <button
+                                class="px-4 py-2 rounded-lg ${isKolamComplete ? "bg-[#D66D75] text-white font-bold control-button" : "bg-gray-300 text-gray-600"}"
+                                onclick="onFinishDrawing()"
+                                ${isKolamComplete ? '' : 'disabled'}
+                            >
+                                Finish
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    function InstructionBoard() {
+        return `
+            <div class="bg-white rounded-2xl shadow-lg p-6 h-[520px] flex flex-col items-center justify-center">
+                <h2 class="text-3xl font-semibold laila-font" style="color: #D66D75;">Drawing Board</h2>
+                <p class="mt-4 text-xl text-center text-gray-600">
+                    Click the Chatbot icon <span class="text-2xl">💬</span> to Select a Level and Design.
+                </p>
+                <p class="mt-2 text-center text-sm text-gray-500">
+                    Your selected Kolam will appear here.
+                </p>
+            </div>
+        `;
+    }
+
+    function ChatbotToggle(progress) {
+        return `
+            <div class="flex flex-col items-center gap-3">
+                <div class="bg-white rounded-2xl shadow p-4 w-72 text-center">
+                    <div class="text-lg font-semibold">Kolam Assistant</div>
+                    <div class="text-sm text-gray-500 mt-1">Select level & design</div>
+                </div>
+                <button class="w-16 h-16 rounded-full bg-[#D66D75] text-white text-2xl control-button" onclick="openChat()">💬</button>
+                <div class="text-sm text-gray-600">Level 1 Progress: ${progress}%</div>
+            </div>
+        `;
+    }
+
+    // --- 9. Master Render Function ---
+
+    function renderApp() {
+        const gameArea = document.getElementById('game-area');
+        
+        if (state.view === "drawing" && state.currentKolam) {
+            gameArea.innerHTML = DrawingScreen();
+            initCanvas(); 
+            if (state.currentSegment === 0 && state.currentKolam.paths.length > 0) {
+                 const firstPath = state.currentKolam.paths[0];
+                 setFeedback(`Start at dot ${firstPath.from}, go towards dot ${firstPath.to}.`, 'info');
+            }
+        } else {
+            gameArea.innerHTML = InstructionBoard();
+        }
+
+        renderChatbot();
+    }
+
+    // --- 10. Initial Load Handler ---
+
+   function populateIntroContent() {
+         const html = `
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">What is Kolam?</h2>
+                <p><strong>Kolam</strong> (known as <strong>Muggu</strong> in Andhra Pradesh or Rangoli in other parts of India) is a traditional art form of geometric floor drawing. Originating in Southern India, it is a daily ritual of mindfulness practiced primarily by women at dawn, at the threshold of the home.</p>
+                <p class="mt-2">Traditionally, Kolams are drawn using rice flour. This isn't just for art; it's a symbolic invitation to ants, insects, and small birds, representing a harmonious co-existence with all living beings (a concept known as Ahimsa or non-violence) and an act of daily generosity.</p>
+            </div>
+            <hr class="my-4 border-gray-300">
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">The Heart of the Kolam: The Pulli</h2>
+                <p>The foundation of most Kolams is a grid of dots called <strong><em>pulli</em></strong>. The patterns are created by drawing lines in relation to these dots.</p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong>Sikku Kolam (Kambi Kolam):</strong> These are intricate, looping designs where a single continuous line (or a few) weaves around the dots—never touching them—to form a complex pattern. It symbolizes the endless cycle of life and infinity.</li>
+                    <li><strong>Pulli Kolam:</strong> These designs, which inspire this game, involve connecting the dots to form straight lines or curves, creating patterns that represent flowers, animals, or divine symbols (our focus).</li>
+                </ul>
+            </div>
+            <hr class="my-4 border-gray-300">
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">Purpose and Symbolism</h2>
+                <p>Beyond being beautiful, Kolams are drawn to:</p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong>Welcome Guests:</strong> It's a sign of hospitality and a way to welcome the Goddess Lakshmi, who represents wealth and prosperity.</li>
+                    <li><strong>Ensure Well-being:</strong> The geometric patterns are believed to create a positive energy field, prevent evil spirits from entering the home, and bring good luck.</li>
+                    <li><strong>Celebrate Festivals:</strong> While drawn daily, much larger and more colorful Kolams are created for special occasions and festivals like Pongal, Diwali, and Onam.</li>
+                </ul>
+            </div>
+            <hr class="my-4 border-gray-300">
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">Modern Relevance</h2>
+                <p>The intricate geometric nature of Kolams has also garnered attention in science and technology:</p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong>Cognitive Health:</strong> The focused practice of drawing Kolam, which stimulates neural pathways and engages fine motor skills, is being explored as a non-pharmacological therapy for patients with Alzheimer's disease and dementia.</li>
+                    <li><strong>Aerospace Design:</strong> The complex, symmetrical patterns and principles of Kolam have been referenced as inspiration in areas like ISRO's rocket designs and computer science algorithms.</li>
+                </ul>
+            </div>
+        `;
+        document.getElementById('intro-content-container').innerHTML = html;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const dataLoaded = await fetchKolamData();
+        if (dataLoaded) {
+            populateIntroContent();
+            const startButton = document.getElementById('start-button');
+            startButton.disabled = false;
+            startButton.classList.remove('bg-gray-400');
+            startButton.classList.add('bg-[#D66D75]', 'hover:bg-[#C25A65]', 'active:bg-[#A94C55]');
+        }
+    });
+</script>
+</body>
+</html>

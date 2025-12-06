@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Kolam Drawing Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Laila:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FDF8F2; /* Warm off-white */
+            color: #4A3F35; /* Muted brown */
+        }
+        .laila-font {
+            font-family: 'Laila', serif;
+        }
+        .feedback-correct {
+            color: #38A169; /* Green */
+        }
+        .feedback-incorrect {
+            color: #E53E3E; /* Red */
+        }
+        .control-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .canvas-container {
+            width: 100%;
+            max-width: 600px;
+            aspect-ratio: 1 / 1;
+            margin: auto;
+            touch-action: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div id="intro-page" class="flex flex-col items-center text-center p-6 max-w-3xl mx-auto">
+        <h1 class="text-5xl md:text-6xl font-bold laila-font" style="color: #D66D75;">Welcome to Kolam Connect</h1>
+        <p class="text-lg mt-4" style="color: #8C7A6B;">Discover the art of traditional Indian floor drawings.</p>
+        
+        <div class="mt-8 text-left space-y-6">
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">What is Kolam?</h2>
+                <p>
+                    <strong>Kolam</strong> (known as <em>Muggu</em> in Andhra Pradesh or <em>Rangoli</em> in other parts of India) is a traditional art form of geometric floor drawing. Originating in Southern India, it is a daily ritual of mindfulness practiced primarily by women at dawn, at the threshold of the home.
+                </p>
+                <p class="mt-2">
+                    Traditionally, Kolams are drawn using <strong>rice flour</strong>. This isn't just for art; it's a symbolic invitation to ants, insects, and small birds, representing a harmonious co-existence with all living beings (a concept known as <em>Ahimsa</em>) and an act of daily generosity.
+                </p>
+            </div>
+            
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">The Heart of the Kolam: The *Pulli*</h2>
+                <p>
+                    The foundation of most Kolams is a grid of dots called <strong><em>pulli</em></strong>. The patterns are created by drawing lines in relation to these dots.
+                </p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong>Sikku Kolam (Kambi Kolam):</strong> These are intricate, looping designs where a single continuous line (or a few) weaves around the dots—never touching them—to form a complex pattern. It symbolizes the endless cycle of life and infinity.</li>
+                    <li><strong>Pulli Kolam:</strong> These designs, which inspire this game, involve <strong>connecting</strong> the dots to form straight lines or curves, creating patterns that represent flowers, animals, or divine symbols.</li>
+                </ul>
+            </div>
+
+            <div>
+                <h2 class="text-2xl font-semibold laila-font mb-3" style="color: #D66D75;">Purpose and Symbolism</h2>
+                <p>
+                    Beyond being beautiful, Kolams are drawn to:
+                </p>
+                <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li><strong>Welcome Guests:</strong> It's a sign of hospitality and a way to welcome the Goddess Lakshmi, who represents wealth and prosperity.</li>
+                    <li><strong>Ensure Well-being:</strong> The geometric patterns are believed to create a positive energy field, prevent evil spirits from entering the home, and bring good luck.</li>
+                    <li><strong>Celebrate Festivals:</strong> While drawn daily, much larger and more colorful Kolams are created for special occasions and festivals like <strong>Pongal</strong>, <strong>Diwali</strong>, and Onam.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="mt-8 text-center">
+             <p class="font-semibold text-lg" style="color: #4A3F35;">
+                Ready to try? Click the 💬 icon to select your level and begin!
+            </p>
+        </div>
+        </div>
+
+    <div id="game-page" class="hidden w-full flex-col items-center">
+        <header class="text-center mb-4">
+            <h1 class="text-4xl md:text-5xl font-bold laila-font" style="color: #D66D75;">Kolam Connect</h1>
+            <p class="text-lg mt-1" style="color: #8C7A6B;">Follow the path to draw beautiful designs!</p>
+        </header>
+
+        <div id="feedback-message" class="h-8 text-xl font-semibold mb-2 text-center transition-opacity duration-300">
+            Start at dot number 1!
+        </div>
+
+        <div class="canvas-container bg-white rounded-2xl shadow-lg border-2 border-gray-200">
+            <canvas id="kolamCanvas"></canvas>
+        </div>
+
+        <footer class="mt-6 flex items-center justify-center gap-4 w-full max-w-md flex-wrap">
+            <div class="flex items-center gap-2">
+                <label for="kolam-select" class="font-semibold">Design:</label>
+                <select id="kolam-select" class="p-2 rounded-lg border-2 border-gray-300 focus:ring-2 focus:ring-[#D66D75] focus:border-[#D66D75] bg-white">
+                    <option value="star">Star</option>
+                    <option value="hexagon">Hexagon</option>
+                    <option value="lotus">Lotus Bud</option>
+                </select>
+            </div>
+            <button id="reset-button" class="control-button bg-[#D66D75] text-white font-bold py-2 px-6 rounded-lg shadow-md">
+                Reset
+            </button>
+        </footer>
+    </div>
+
+    <button id="chatbot-icon" class="fixed bottom-5 right-5 bg-[#D66D75] text-white w-16 h-16 rounded-full flex items-center justify-center text-4xl shadow-lg control-button" aria-label="Open levels">
+        💬
+    </button>
+
+    <div id="level-selector" class="hidden fixed inset-0 z-50">
+        <div id="levels-overlay" class="absolute inset-0 bg-black bg-opacity-50"></div>
+        
+        <div class="relative bg-white w-11/12 max-w-sm m-auto mt-[30vh] p-6 rounded-2xl shadow-xl flex flex-col items-center gap-4">
+            <button id="close-levels-button" class="absolute top-2 right-2 text-2xl text-gray-500 hover:text-gray-800">&times;</button>
+            <h2 class="text-2xl font-bold laila-font" style="color: #4A3F35;">Select a Level</h2>
+            
+            <button id="home-button" class="control-button w-full bg-gray-200 text-gray-700 font-bold py-3 px-6 rounded-lg shadow-md">
+                Back to Intro
+            </button>
+            <button id="level-1-button" class="control-button w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow-md">
+                Level 1: Simple Shapes
+            </button>
+            <button class="control-button w-full bg-gray-400 text-white font-bold py-3 px-6 rounded-lg shadow-md opacity-50 cursor-not-allowed" disabled>
+                Level 2 (Coming Soon)
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    const introPage = document.getElementById('intro-page');
+    const gamePage = document.getElementById('game-page');
+    const chatbotIcon = document.getElementById('chatbot-icon');
+    const levelSelector = document.getElementById('level-selector');
+    const levelsOverlay = document.getElementById('levels-overlay');
+    const closeLevelsButton = document.getElementById('close-levels-button');
+    const homeButton = document.getElementById('home-button');
+    const level1Button = document.getElementById('level-1-button');
+    const resetButton = document.getElementById('reset-button');
+    const kolamSelect = document.getElementById('kolam-select');
+    const feedbackEl = document.getElementById('feedback-message');
+    const canvas = document.getElementById('kolamCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // === New modal for selecting design ===
+    let designSelector;
+    function createDesignSelector() {
+        designSelector = document.createElement('div');
+        designSelector.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+        designSelector.innerHTML = `
+            <div class="bg-white rounded-2xl shadow-xl p-6 w-11/12 max-w-sm text-center">
+                <h2 class="text-2xl font-bold laila-font mb-4" style="color:#4A3F35;">What kind of design do you want to try?</h2>
+                <select id="design-choice" class="p-2 w-full border-2 border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-[#D66D75]">
+                    <option value="" selected disabled>Select a Design</option>
+                    <option value="star">⭐ Star</option>
+                    <option value="hexagon">⬡ Hexagon</option>
+                    <option value="lotus">🌸 Lotus Bud</option>
+                </select>
+                <div class="flex justify-end gap-2">
+                    <button id="cancel-design" class="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg">Cancel</button>
+                    <button id="confirm-design" class="bg-[#D66D75] text-white font-bold py-2 px-4 rounded-lg">Start</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(designSelector);
+
+        document.getElementById('cancel-design').addEventListener('click', () => {
+            designSelector.remove();
+        });
+
+        document.getElementById('confirm-design').addEventListener('click', () => {
+            const selected = document.getElementById('design-choice').value;
+            if (selected) {
+                kolamSelect.value = selected;
+                designSelector.remove();
+                startGame(selected);
+            } else {
+                alert('Please select a design to continue!');
+            }
+        });
+    }
+
+    function startGame(selectedKolam) {
+        introPage.classList.add('hidden');
+        gamePage.classList.remove('hidden');
+        gamePage.classList.add('flex');
+        hideLevelSelector();
+        changeKolam(selectedKolam);
+        resizeCanvas();
+    }
+
+    // === Level Modal controls ===
+    function showLevelSelector() { levelSelector.classList.remove('hidden'); }
+    function hideLevelSelector() { levelSelector.classList.add('hidden'); }
+
+    chatbotIcon.addEventListener('click', showLevelSelector);
+    closeLevelsButton.addEventListener('click', hideLevelSelector);
+    levelsOverlay.addEventListener('click', hideLevelSelector);
+
+    homeButton.addEventListener('click', () => {
+        gamePage.classList.add('hidden');
+        gamePage.classList.remove('flex');
+        introPage.classList.remove('hidden');
+        hideLevelSelector();
+    });
+
+    level1Button.addEventListener('click', () => {
+        hideLevelSelector();
+        createDesignSelector();
+    });
+
+    // === Kolam game logic ===
+    const kolamData = {
+        star: {
+            dots: [
+                { id: 1, x: 0.5, y: 0.1 }, { id: 2, x: 0.9, y: 0.4 },
+                { id: 3, x: 0.7, y: 0.9 }, { id: 4, x: 0.3, y: 0.9 },
+                { id: 5, x: 0.1, y: 0.4 },
+            ],
+            paths: [
+                { from: 1, to: 3 }, { from: 3, to: 5 },
+                { from: 5, to: 2 }, { from: 2, to: 4 },
+                { from: 4, to: 1 },
+            ]
+        },
+        hexagon: {
+            dots: [
+                { id: 1, x: 0.5, y: 0.1 }, { id: 2, x: 0.85, y: 0.3 },
+                { id: 3, x: 0.85, y: 0.7 }, { id: 4, x: 0.5, y: 0.9 },
+                { id: 5, x: 0.15, y: 0.7 }, { id: 6, x: 0.15, y: 0.3 }
+            ],
+            paths: [
+                { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 4 },
+                { from: 4, to: 5 }, { from: 5, to: 6 }, { from: 6, to: 1 },
+            ]
+        },
+        lotus: {
+            dots: [
+                { id: 1, x: 0.5, y: 0.9 }, { id: 2, x: 0.2, y: 0.7 },
+                { id: 3, x: 0.5, y: 0.1 }, { id: 4, x: 0.8, y: 0.7 }
+            ],
+            paths: [
+                { from: 1, to: 2, type: 'quadratic', cp: { x: 0.3, y: 0.95 } },
+                { from: 2, to: 3, type: 'quadratic', cp: { x: 0.1, y: 0.3 } },
+                { from: 3, to: 4, type: 'quadratic', cp: { x: 0.9, y: 0.3 } },
+                { from: 4, to: 1, type: 'quadratic', cp: { x: 0.7, y: 0.95 } }
+            ]
+        }
+    };
+
+    let currentKolamName = 'star';
+    let currentKolam = kolamData[currentKolamName];
+    let isDrawing = false;
+    let userPath = [];
+    let currentSegment = 0;
+    let connectedDots = new Set([1]);
+    const DOT_RADIUS = 15, SNAP_RADIUS = 20, PATH_TOLERANCE = 15;
+    let canvasSize = 0, scaleFactor = 1;
+
+    function resizeCanvas() {
+        const container = canvas.parentElement;
+        if (container.clientWidth === 0) return;
+        const size = Math.min(container.clientWidth, container.clientHeight);
+        canvas.width = size;
+        canvas.height = size;
+        canvasSize = size;
+        scaleFactor = size;
+        draw();
+    }
+
+    function getDotById(id) { return currentKolam.dots.find(d => d.id === id); }
+
+    function drawGuides() {
+        ctx.strokeStyle = '#D1C4E9';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 10]);
+        currentKolam.paths.forEach(path => {
+            const fromDot = getDotById(path.from);
+            const toDot = getDotById(path.to);
+            if (!fromDot || !toDot) return;
+            ctx.beginPath();
+            ctx.moveTo(fromDot.x * scaleFactor, fromDot.y * scaleFactor);
+            if (path.type === 'quadratic')
+                ctx.quadraticCurveTo(path.cp.x * scaleFactor, path.cp.y * scaleFactor, toDot.x * scaleFactor, toDot.y * scaleFactor);
+            else ctx.lineTo(toDot.x * scaleFactor, toDot.y * scaleFactor);
+            ctx.stroke();
+        });
+        ctx.setLineDash([]);
+    }
+
+    function drawDots() {
+        currentKolam.dots.forEach(dot => {
+            const isConnected = connectedDots.has(dot.id);
+            const isNext = (currentSegment < currentKolam.paths.length && dot.id === currentKolam.paths[currentSegment].to) || (userPath.length === 0 && dot.id === 1);
+            ctx.beginPath();
+            ctx.arc(dot.x * scaleFactor, dot.y * scaleFactor, DOT_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = isConnected ? '#68D391' : isNext ? '#F6E05E' : '#E2E8F0';
+            ctx.fill();
+            ctx.strokeStyle = '#4A5568';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#2D3748';
+            ctx.font = `bold ${DOT_RADIUS}px Inter`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(dot.id, dot.x * scaleFactor, dot.y * scaleFactor);
+        });
+    }
+
+    function drawUserPath() {
+        if (userPath.length < 2) return;
+        for (let i = 0; i < userPath.length - 1; i++) {
+            ctx.beginPath();
+            ctx.moveTo(userPath[i].x, userPath[i].y);
+            ctx.lineWidth = userPath[i].isCorrect ? 8 : 10;
+            ctx.strokeStyle = userPath[i].isCorrect ? '#48BB78' : '#F56565';
+            ctx.lineTo(userPath[i + 1].x, userPath[i + 1].y);
+            ctx.stroke();
+        }
+    }
+
+    function draw() { ctx.clearRect(0, 0, canvas.width, canvas.height); drawGuides(); drawUserPath(); drawDots(); }
+
+    function distance(p1, p2) { return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2); }
+
+    function pointLineDistance(p, a, b) {
+        const L2 = distance(a, b) ** 2;
+        if (L2 === 0) return distance(p, a);
+        let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / L2;
+        t = Math.max(0, Math.min(1, t));
+        const projection = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+        return distance(p, projection);
+    }
+
+    function setFeedback(message, type = 'info') {
+        feedbackEl.textContent = message;
+        feedbackEl.className = 'h-8 text-xl font-semibold mb-2 text-center transition-opacity duration-300 ';
+        if (type === 'correct') feedbackEl.classList.add('feedback-correct');
+        else if (type === 'incorrect') feedbackEl.classList.add('feedback-incorrect');
+    }
+
+    function startDrawing(e) {
+        e.preventDefault();
+        if (currentSegment >= currentKolam.paths.length) return;
+        const pos = getMousePos(e);
+        const startDot = getDotById(currentKolam.paths[currentSegment].from);
+        const startPos = { x: startDot.x * scaleFactor, y: startDot.y * scaleFactor };
+        if (distance(pos, startPos) <= SNAP_RADIUS) {
+            isDrawing = true;
+            userPath.push({ ...pos, isCorrect: true });
+        }
+    }
+
+    function getMousePos(event) {
+        const rect = canvas.getBoundingClientRect();
+        if (event.touches) return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    }
+
+    function drawing(e) {
+        e.preventDefault();
+        if (!isDrawing) return;
+        const pos = getMousePos(e);
+        const currentPath = currentKolam.paths[currentSegment];
+        const fromDot = getDotById(currentPath.from);
+        const toDot = getDotById(currentPath.to);
+        const fromPos = { x: fromDot.x * scaleFactor, y: fromDot.y * scaleFactor };
+        const toPos = { x: toDot.x * scaleFactor, y: toDot.y * scaleFactor };
+        let isCorrect = false;
+        if (currentPath.type === 'quadratic') {
+            const cpPos = { x: currentPath.cp.x * scaleFactor, y: currentPath.cp.y * scaleFactor };
+            isCorrect = pointLineDistance(pos, fromPos, cpPos) <= PATH_TOLERANCE || pointLineDistance(pos, cpPos, toPos) <= PATH_TOLERANCE;
+        } else isCorrect = pointLineDistance(pos, fromPos, toPos) <= PATH_TOLERANCE;
+
+        userPath.push({ ...pos, isCorrect });
+        if (isCorrect) setFeedback('Keep going!', 'correct');
+        else setFeedback('Try to stay on the path!', 'incorrect');
+
+        if (distance(pos, toPos) <= SNAP_RADIUS) {
+            userPath.push({ ...toPos, isCorrect: true });
+            connectedDots.add(toDot.id);
+            currentSegment++;
+            isDrawing = false;
+            if (currentSegment >= currentKolam.paths.length) setFeedback('Wonderful! Kolam complete!', 'correct');
+            else setFeedback(`Great! Now go to dot ${currentKolam.paths[currentSegment].to}`, 'info');
+        }
+        draw();
+    }
+
+    function stopDrawing() { if (isDrawing) { setFeedback('Oops! You let go. Try again.', 'incorrect'); isDrawing = false; } }
+
+    function reset() {
+        isDrawing = false; userPath = []; currentSegment = 0; connectedDots = new Set([1]);
+        const firstPath = currentKolam.paths.find(p => p.from === 1);
+        if (firstPath) setFeedback(`Start at dot 1, go towards dot ${firstPath.to}`); else setFeedback('Start at dot 1!');
+        draw();
+    }
+
+    function changeKolam(selected = kolamSelect.value) {
+        currentKolamName = selected;
+        currentKolam = kolamData[currentKolamName];
+        reset();
+    }
+
+    resetButton.addEventListener('click', reset);
+    kolamSelect.addEventListener('change', () => changeKolam(kolamSelect.value));
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', drawing);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseleave', stopDrawing);
+    canvas.addEventListener('touchstart', startDrawing);
+    canvas.addEventListener('touchmove', drawing);
+    canvas.addEventListener('touchend', stopDrawing);
+    window.addEventListener('resize', () => {
+        if (!gamePage.classList.contains('hidden')) resizeCanvas();
+    });
+});
+</script>
+
+</body>
+</html>
